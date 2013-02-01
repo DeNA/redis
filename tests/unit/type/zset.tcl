@@ -168,7 +168,7 @@ start_server {tags {"zset"}} {
             assert_equal {d 4 c 3 b 2 a 1} [r zrevrange ztmp 0 -1 withscores]
         }
 
-        test "ZRANK/ZREVRANK basics - $encoding" {
+        test "ZRANK basics - $encoding" {
             r del zranktmp
             r zadd zranktmp 10 x
             r zadd zranktmp 20 y
@@ -177,10 +177,51 @@ start_server {tags {"zset"}} {
             assert_equal 1 [r zrank zranktmp y]
             assert_equal 2 [r zrank zranktmp z]
             assert_equal "" [r zrank zranktmp foo]
+        }
+
+        test "ZREVRANK basics - $encoding" {
+            r del zranktmp
+            r zadd zranktmp 10 x
+            r zadd zranktmp 20 y
+            r zadd zranktmp 30 z
             assert_equal 2 [r zrevrank zranktmp x]
             assert_equal 1 [r zrevrank zranktmp y]
             assert_equal 0 [r zrevrank zranktmp z]
             assert_equal "" [r zrevrank zranktmp foo]
+        }
+
+        test "ZRANK withties - $encoding" {
+            r del zranktmp
+            r zadd zranktmp 10 x
+            r zadd zranktmp 20 y
+            r zadd zranktmp 20 z
+            r zadd zranktmp 30 d
+            r zadd zranktmp 30 e
+            r zadd zranktmp 40 f
+            assert_equal 0 [r zrank zranktmp x withties]
+            assert_equal 1 [r zrank zranktmp y withties]
+            assert_equal 1 [r zrank zranktmp z withties]
+            assert_equal 3 [r zrank zranktmp d withties]
+            assert_equal 3 [r zrank zranktmp e withties]
+            assert_equal 5 [r zrank zranktmp f withties]
+            assert_equal "" [r zrank zranktmp foo withties]
+        }
+
+        test "ZREVRANK withties - $encoding" {
+            r del zranktmp
+            r zadd zranktmp 10 x
+            r zadd zranktmp 20 y
+            r zadd zranktmp 20 z
+            r zadd zranktmp 30 d
+            r zadd zranktmp 30 e
+            r zadd zranktmp 40 f
+            assert_equal 5 [r zrevrank zranktmp x withties]
+            assert_equal 3 [r zrevrank zranktmp y withties]
+            assert_equal 3 [r zrevrank zranktmp z withties]
+            assert_equal 1 [r zrevrank zranktmp d withties]
+            assert_equal 1 [r zrevrank zranktmp e withties]
+            assert_equal 0 [r zrevrank zranktmp f withties]
+            assert_equal "" [r zrank zranktmp foo withties]
         }
 
         test "ZRANK - after deletion - $encoding" {

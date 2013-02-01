@@ -351,23 +351,31 @@ unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned 
  * Returns 0 when the element cannot be found, rank otherwise.
  * Note that the rank is 1-based due to the span of zsl->header to the
  * first element. */
-unsigned long zslGetRank(zskiplist *zsl, double score, robj *o) {
-    zskiplistNode *x;
+unsigned long zslGetRank(zskiplist *zsl, double score, robj *o, int withties, int reverse) {
+    zskiplistNode *x, *nextNode;
     unsigned long rank = 0;
     int i;
 
     x = zsl->header;
     for (i = zsl->level-1; i >= 0; i--) {
-        while (x->level[i].forward &&
-            (x->level[i].forward->score < score ||
-                (x->level[i].forward->score == score &&
-                compareStringObjects(x->level[i].forward->obj,o) <= 0))) {
+        nextNode = x->level[i].forward;
+        while (nextNode && 
+                ((nextNode->score < score) ||            
+                 (nextNode->score == score && 
+                 ((!withties && compareStringObjects(nextNode->obj,o) <= 0) ||
+                  (withties && 
+                    (reverse || !nextNode->backward || nextNode->backward->score < score)))))) {
+
             rank += x->level[i].span;
-            x = x->level[i].forward;
+            x = nextNode;
+            nextNode=x->level[i].forward;
         }
 
         /* x might be equal to zsl->header, so test if obj is non-NULL */
-        if (x->obj && equalStringObjects(x->obj,o)) {
+        if ((!withties && x->obj && equalStringObjects(x->obj,o)) ||
+            (withties && x->score == score &&
+                ((!reverse && (!x->backward || x->backward->score < score)) || 
+                 (reverse && (!x->level[0].forward || x->level[0].forward->score > score))))) {
             return rank;
         }
     }
@@ -2052,7 +2060,7 @@ void zcountCommand(redisClient *c) {
 
         /* Use rank of first element, if any, to determine preliminary count */
         if (zn != NULL) {
-            rank = zslGetRank(zsl, zn->score, zn->obj);
+            rank = zslGetRank(zsl, zn->score, zn->obj, 0, 0);
             count = (zsl->length - (rank - 1));
 
             /* Find last element in range */
@@ -2060,7 +2068,7 @@ void zcountCommand(redisClient *c) {
 
             /* Use rank of last element, if any, to determine the actual count */
             if (zn != NULL) {
-                rank = zslGetRank(zsl, zn->score, zn->obj);
+                rank = zslGetRank(zsl, zn->score, zn->obj, 0, 0);
                 count -= (zsl->length - rank);
             }
         }
@@ -2115,8 +2123,16 @@ void zrankGenericCommand(redisClient *c, int reverse) {
     robj *key = c->argv[1];
     robj *ele = c->argv[2];
     robj *zobj;
+    int withties = 0;
     unsigned long llen;
     unsigned long rank;
+
+    if (c->argc == 4 && !strcasecmp(c->argv[3]->ptr,"withties")) {
+        withties = 1;
+    } else if (c->argc >= 4) {
+        addReply(c,shared.syntaxerr);
+        return;
+    }
 
     if ((zobj = lookupKeyReadOrReply(c,key,shared.nullbulk)) == NULL ||
         checkType(c,zobj,REDIS_ZSET)) return;
@@ -2126,25 +2142,36 @@ void zrankGenericCommand(redisClient *c, int reverse) {
     if (zobj->encoding == REDIS_ENCODING_ZIPLIST) {
         unsigned char *zl = zobj->ptr;
         unsigned char *eptr, *sptr;
+        double fscore;
 
-        eptr = ziplistIndex(zl,0);
-        redisAssertWithInfo(c,zobj,eptr != NULL);
-        sptr = ziplistNext(zl,eptr);
-        redisAssertWithInfo(c,zobj,sptr != NULL);
+
+        if (reverse) {
+            sptr = ziplistIndex(zl,-1);
+            redisAssertWithInfo(c,zobj,sptr != NULL);
+            eptr = ziplistPrev(zl,sptr);
+            redisAssertWithInfo(c,zobj,eptr != NULL);
+        }
+        else {
+            eptr = ziplistIndex(zl,0);
+            redisAssertWithInfo(c,zobj,eptr != NULL);
+            sptr = ziplistNext(zl,eptr);
+            redisAssertWithInfo(c,zobj,sptr != NULL);
+        }
+
+        zzlFind(zl,c->argv[2],&fscore);
+        redisAssertWithInfo(c,zobj,fscore > -1);
 
         rank = 1;
         while(eptr != NULL) {
-            if (ziplistCompare(eptr,ele->ptr,sdslen(ele->ptr)))
+            if ((!withties && ziplistCompare(eptr,ele->ptr,sdslen(ele->ptr))) ||
+                (withties && zzlGetScore(sptr) == fscore))
                 break;
             rank++;
-            zzlNext(zl,&eptr,&sptr);
+            reverse ? zzlPrev(zl,&eptr,&sptr) : zzlNext(zl,&eptr,&sptr);
         }
 
         if (eptr != NULL) {
-            if (reverse)
-                addReplyLongLong(c,llen-rank);
-            else
-                addReplyLongLong(c,rank-1);
+            addReplyLongLong(c,rank-1);
         } else {
             addReply(c,shared.nullbulk);
         }
@@ -2158,7 +2185,7 @@ void zrankGenericCommand(redisClient *c, int reverse) {
         de = dictFind(zs->dict,ele);
         if (de != NULL) {
             score = *(double*)dictGetVal(de);
-            rank = zslGetRank(zsl,score,ele);
+            rank = zslGetRank(zsl,score,ele,withties, reverse);
             redisAssertWithInfo(c,ele,rank); /* Existing elements always have a rank. */
             if (reverse)
                 addReplyLongLong(c,llen-rank);
