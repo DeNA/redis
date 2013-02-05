@@ -351,7 +351,7 @@ unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned 
  * Returns 0 when the element cannot be found, rank otherwise.
  * Note that the rank is 1-based due to the span of zsl->header to the
  * first element. */
-unsigned long zslGetRank(zskiplist *zsl, double score, robj *o, int withties, int reverse) {
+unsigned long zslGetRank(zskiplist *zsl, double score, robj *o, int unique, int reverse) {
     zskiplistNode *x, *nextNode;
     unsigned long rank = 0;
     int i;
@@ -360,22 +360,24 @@ unsigned long zslGetRank(zskiplist *zsl, double score, robj *o, int withties, in
     for (i = zsl->level-1; i >= 0; i--) {
         nextNode = x->level[i].forward;
         while (nextNode && 
-                ((nextNode->score < score) ||            
-                 (nextNode->score == score && 
-                 ((!withties && compareStringObjects(nextNode->obj,o) <= 0) ||
-                  (withties && 
-                    (reverse || !nextNode->backward || nextNode->backward->score < score)))))) {
-
+                (nextNode->score < score ||            
+                (nextNode->score == score && 
+                    ((!unique && compareStringObjects(nextNode->obj,o) <= 0) || // Check for ZRANK 
+                    (unique && (!nextNode->backward || nextNode->backward->score < score)) || // Check for ZRANK UNIQUE
+                    (unique && reverse) // Check for ZREVRANK UNIQUE
+            )))) 
+        {
             rank += x->level[i].span;
             x = nextNode;
             nextNode=x->level[i].forward;
         }
 
         /* x might be equal to zsl->header, so test if obj is non-NULL */
-        if ((!withties && x->obj && equalStringObjects(x->obj,o)) ||
-            (withties && x->score == score &&
-                ((!reverse && (!x->backward || x->backward->score < score)) || 
-                 (reverse && (!x->level[0].forward || x->level[0].forward->score > score))))) {
+        if (x->obj && x->score == score &&
+                ((!unique && equalStringObjects(x->obj,o)) || // ZRANK check.
+                (!reverse && unique && (!x->backward || x->backward->score < score)) || // ZRANK UNIQUE check 
+                (reverse && unique && (!x->level[0].forward || x->level[0].forward->score > score)))) // ZREVRANK UNIQUE check
+        {
             return rank;
         }
     }
@@ -2123,12 +2125,12 @@ void zrankGenericCommand(redisClient *c, int reverse) {
     robj *key = c->argv[1];
     robj *ele = c->argv[2];
     robj *zobj;
-    int withties = 0;
+    int unique = 0;
     unsigned long llen;
     unsigned long rank;
 
-    if (c->argc == 4 && !strcasecmp(c->argv[3]->ptr,"withties")) {
-        withties = 1;
+    if (c->argc == 4 && !strcasecmp(c->argv[3]->ptr,"unique")) {
+        unique = 1;
     } else if (c->argc >= 4) {
         addReply(c,shared.syntaxerr);
         return;
@@ -2163,8 +2165,8 @@ void zrankGenericCommand(redisClient *c, int reverse) {
 
         rank = 1;
         while(eptr != NULL) {
-            if ((!withties && ziplistCompare(eptr,ele->ptr,sdslen(ele->ptr))) ||
-                (withties && zzlGetScore(sptr) == fscore))
+            if ((!unique && ziplistCompare(eptr,ele->ptr,sdslen(ele->ptr))) ||
+                (unique && zzlGetScore(sptr) == fscore))
                 break;
             rank++;
             reverse ? zzlPrev(zl,&eptr,&sptr) : zzlNext(zl,&eptr,&sptr);
@@ -2185,7 +2187,7 @@ void zrankGenericCommand(redisClient *c, int reverse) {
         de = dictFind(zs->dict,ele);
         if (de != NULL) {
             score = *(double*)dictGetVal(de);
-            rank = zslGetRank(zsl,score,ele,withties, reverse);
+            rank = zslGetRank(zsl,score,ele,unique, reverse);
             redisAssertWithInfo(c,ele,rank); /* Existing elements always have a rank. */
             if (reverse)
                 addReplyLongLong(c,llen-rank);
