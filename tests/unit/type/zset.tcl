@@ -170,8 +170,8 @@ start_server {tags {"zset"}} {
 
         test "ZRANK basics - $encoding" {
             r del zranktmp
-            r zadd zranktmp 10 x
-            r zadd zranktmp 20 y
+            r zadd zranktmp -10 x
+            r zadd zranktmp 0 y
             r zadd zranktmp 30 z
             assert_equal 0 [r zrank zranktmp x]
             assert_equal 1 [r zrank zranktmp y]
@@ -181,8 +181,8 @@ start_server {tags {"zset"}} {
 
         test "ZREVRANK basics - $encoding" {
             r del zranktmp
-            r zadd zranktmp 10 x
-            r zadd zranktmp 20 y
+            r zadd zranktmp -10 x
+            r zadd zranktmp 0 y
             r zadd zranktmp 30 z
             assert_equal 2 [r zrevrank zranktmp x]
             assert_equal 1 [r zrevrank zranktmp y]
@@ -192,9 +192,9 @@ start_server {tags {"zset"}} {
 
         test "ZRANK unique - $encoding" {
             r del zranktmp
-            r zadd zranktmp 10 x
-            r zadd zranktmp 20 y
-            r zadd zranktmp 20 z
+            r zadd zranktmp -10 x
+            r zadd zranktmp 0 y
+            r zadd zranktmp 0 z
             r zadd zranktmp 30 d
             r zadd zranktmp 30 e
             r zadd zranktmp 40 f
@@ -209,9 +209,9 @@ start_server {tags {"zset"}} {
 
         test "ZREVRANK unique - $encoding" {
             r del zranktmp
-            r zadd zranktmp 10 x
-            r zadd zranktmp 20 y
-            r zadd zranktmp 20 z
+            r zadd zranktmp -10 x
+            r zadd zranktmp 0 y
+            r zadd zranktmp 0 z
             r zadd zranktmp 30 d
             r zadd zranktmp 30 e
             r zadd zranktmp 40 f
