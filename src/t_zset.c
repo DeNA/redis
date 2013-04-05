@@ -2144,7 +2144,7 @@ void zrankGenericCommand(redisClient *c, int reverse) {
     if (zobj->encoding == REDIS_ENCODING_ZIPLIST) {
         unsigned char *zl = zobj->ptr;
         unsigned char *eptr, *sptr;
-        double fscore;
+        double currentScore, prevScore, count;
 
 
         if (reverse) {
@@ -2160,15 +2160,20 @@ void zrankGenericCommand(redisClient *c, int reverse) {
             redisAssertWithInfo(c,zobj,sptr != NULL);
         }
 
-        zzlFind(zl,c->argv[2],&fscore);
-        redisAssertWithInfo(c,zobj,fscore > -1);
-
-        rank = 1;
+        count = 1;
+        rank = count;
         while(eptr != NULL) {
-            if ((!unique && ziplistCompare(eptr,ele->ptr,sdslen(ele->ptr))) ||
-                (unique && zzlGetScore(sptr) == fscore))
+            currentScore = zzlGetScore(sptr);
+
+            if ((!unique) || (prevScore != currentScore)) {
+                prevScore = currentScore;
+                rank = count;
+            }
+
+            if (ziplistCompare(eptr,ele->ptr,sdslen(ele->ptr)))
                 break;
-            rank++;
+
+            count++;
             reverse ? zzlPrev(zl,&eptr,&sptr) : zzlNext(zl,&eptr,&sptr);
         }
 
