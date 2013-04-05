@@ -190,6 +190,12 @@ start_server {tags {"zset"}} {
             assert_equal "" [r zrevrank zranktmp foo]
         }
 
+        test "ZRANK negative score - $encoding" {
+            r del zranktmp
+            r zadd zranktmp -1 x
+            assert_equal 0 [r zrank zranktmp x]
+        }
+
         test "ZRANK unique - $encoding" {
             r del zranktmp
             r zadd zranktmp -10 x
