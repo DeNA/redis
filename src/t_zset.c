@@ -2162,6 +2162,8 @@ void zrankGenericCommand(redisClient *c, int reverse) {
 
         count = 1;
         rank = count;
+        prevScore = 0;
+
         while(eptr != NULL) {
             currentScore = zzlGetScore(sptr);
 
