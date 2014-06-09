@@ -2741,7 +2741,7 @@ void clusterCron(void) {
 
             fd = anetTcpNonBlockBindConnect(server.neterr, node->ip,
                 node->port+REDIS_CLUSTER_PORT_INCR,
-                    server.bindaddr_count ? server.bindaddr[0] : NULL);
+                    server.bindaddr_count ? server.bindaddr[0] : NULL, NULL);
             if (fd == -1) {
                 redisLog(REDIS_DEBUG, "Unable to connect to "
                     "Cluster Node [%s]:%d -> %s", node->ip,
@@ -4023,7 +4023,7 @@ int migrateGetSocket(redisClient *c, robj *host, robj *port, long timeout) {
 
     /* Create the socket */
     fd = anetTcpNonBlockConnect(server.neterr,c->argv[1]->ptr,
-                atoi(c->argv[2]->ptr));
+                atoi(c->argv[2]->ptr), NULL);
     if (fd == -1) {
         sdsfree(name);
         addReplyErrorFormat(c,"Can't connect to target node: %s",

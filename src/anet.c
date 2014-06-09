@@ -235,11 +235,12 @@ static int anetCreateSocket(char *err, int domain) {
 #define ANET_CONNECT_NONE 0
 #define ANET_CONNECT_NONBLOCK 1
 static int anetTcpGenericConnect(char *err, char *addr, int port,
-                                 char *source_addr, int flags)
+                                 char *source_addr, int flags, char *bindaddr)
 {
     int s = ANET_ERR, rv;
     char portstr[6];  /* strlen("65535") + 1; */
     struct addrinfo hints, *servinfo, *bservinfo, *p, *b;
+    struct sockaddr_in src_sa;
 
     snprintf(portstr,sizeof(portstr),"%d",port);
     memset(&hints,0,sizeof(hints));
@@ -277,6 +278,16 @@ static int anetTcpGenericConnect(char *err, char *addr, int port,
                 goto end;
             }
         }
+
+        /* Only checks one of potentially multiple bound interfaces.
+         * Only applicable with IPv4 addresses. */
+        if (bindaddr && strncmp(bindaddr, "127.", 4) != 0) {
+            memset(&src_sa, 0, sizeof(src_sa));
+            src_sa.sin_family = AF_INET;
+            src_sa.sin_addr.s_addr = inet_addr(bindaddr);
+            bind(s, (struct sockaddr *)&src_sa, sizeof(src_sa));
+        }
+
         if (connect(s,p->ai_addr,p->ai_addrlen) == -1) {
             /* If the socket is non-blocking, it is ok for connect() to
              * return an EINPROGRESS error here. */
@@ -306,17 +317,17 @@ end:
 
 int anetTcpConnect(char *err, char *addr, int port)
 {
-    return anetTcpGenericConnect(err,addr,port,NULL,ANET_CONNECT_NONE);
+    return anetTcpGenericConnect(err,addr,port,NULL,ANET_CONNECT_NONE,NULL);
 }
 
-int anetTcpNonBlockConnect(char *err, char *addr, int port)
+int anetTcpNonBlockConnect(char *err, char *addr, int port, char *bindaddr)
 {
-    return anetTcpGenericConnect(err,addr,port,NULL,ANET_CONNECT_NONBLOCK);
+    return anetTcpGenericConnect(err,addr,port,NULL,ANET_CONNECT_NONBLOCK,bindaddr);
 }
 
-int anetTcpNonBlockBindConnect(char *err, char *addr, int port, char *source_addr)
+int anetTcpNonBlockBindConnect(char *err, char *addr, int port, char *source_addr, char *bindaddr)
 {
-    return anetTcpGenericConnect(err,addr,port,source_addr,ANET_CONNECT_NONBLOCK);
+    return anetTcpGenericConnect(err,addr,port,source_addr,ANET_CONNECT_NONBLOCK,bindaddr);
 }
 
 int anetUnixGenericConnect(char *err, char *path, int flags)

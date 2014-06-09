@@ -1189,7 +1189,7 @@ unsigned int countKeysInSlot(unsigned int hashslot) {
 
     /* Use rank of first element, if any, to determine preliminary count */
     if (zn != NULL) {
-        rank = zslGetRank(zsl, zn->score, zn->obj);
+        rank = zslGetRank(zsl, zn->score, zn->obj, 0, 0);
         count = (zsl->length - (rank - 1));
 
         /* Find last element in range */
@@ -1197,7 +1197,7 @@ unsigned int countKeysInSlot(unsigned int hashslot) {
 
         /* Use rank of last element, if any, to determine the actual count */
         if (zn != NULL) {
-            rank = zslGetRank(zsl, zn->score, zn->obj);
+            rank = zslGetRank(zsl, zn->score, zn->obj, 0, 0);
             count -= (zsl->length - rank);
         }
     }
