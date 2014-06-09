@@ -234,11 +234,12 @@ static int anetCreateSocket(char *err, int domain) {
 
 #define ANET_CONNECT_NONE 0
 #define ANET_CONNECT_NONBLOCK 1
-static int anetTcpGenericConnect(char *err, char *addr, int port, int flags)
+static int anetTcpGenericConnect(char *err, char *addr, int port, int flags, char *bindaddr)
 {
     int s = ANET_ERR, rv;
     char portstr[6];  /* strlen("65535") + 1; */
     struct addrinfo hints, *servinfo, *p;
+    struct sockaddr_in src_sa;
 
     snprintf(portstr,sizeof(portstr),"%d",port);
     memset(&hints,0,sizeof(hints));
@@ -258,6 +259,16 @@ static int anetTcpGenericConnect(char *err, char *addr, int port, int flags)
         if (anetSetReuseAddr(err,s) == ANET_ERR) goto error;
         if (flags & ANET_CONNECT_NONBLOCK && anetNonBlock(err,s) != ANET_OK)
             goto error;
+
+        /* Only checks one of potentially multiple bound interfaces.
+         * Only applicable with IPv4 addresses. */
+        if (bindaddr && strncmp(bindaddr, "127.", 4) != 0) {
+            memset(&src_sa, 0, sizeof(src_sa));
+            src_sa.sin_family = AF_INET;
+            src_sa.sin_addr.s_addr = inet_addr(bindaddr);
+            bind(s, (struct sockaddr *)&src_sa, sizeof(src_sa));
+        }
+
         if (connect(s,p->ai_addr,p->ai_addrlen) == -1) {
             /* If the socket is non-blocking, it is ok for connect() to
              * return an EINPROGRESS error here. */
@@ -287,12 +298,12 @@ end:
 
 int anetTcpConnect(char *err, char *addr, int port)
 {
-    return anetTcpGenericConnect(err,addr,port,ANET_CONNECT_NONE);
+    return anetTcpGenericConnect(err,addr,port,ANET_CONNECT_NONE,NULL);
 }
 
-int anetTcpNonBlockConnect(char *err, char *addr, int port)
+int anetTcpNonBlockConnect(char *err, char *addr, int port, char *bindaddr)
 {
-    return anetTcpGenericConnect(err,addr,port,ANET_CONNECT_NONBLOCK);
+    return anetTcpGenericConnect(err,addr,port,ANET_CONNECT_NONBLOCK,bindaddr);
 }
 
 int anetUnixGenericConnect(char *err, char *path, int flags)

@@ -152,7 +152,7 @@ void migrateCommand(redisClient *c) {
     
     /* Connect */
     fd = anetTcpNonBlockConnect(server.neterr,c->argv[1]->ptr,
-                atoi(c->argv[2]->ptr));
+                atoi(c->argv[2]->ptr), server.bindaddr[0]);
     if (fd == -1) {
         addReplyErrorFormat(c,"Can't connect to target node: %s",
             server.neterr);
