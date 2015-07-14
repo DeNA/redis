@@ -14,6 +14,136 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 
+--[ Redis 2.6.17 ] Release date: 11 Dec 2013
+
+UPGRADE URGENCY: MODERATE.
+
+* [FIX] redis-cli: fix big keys search when the key no longer exist.
+* [FIX] Allow AUTH / PING when disconnected from slave with serve-stale-data on.
+* [FIX] redis-benchmark: update help for new __rand_int__ form.
+* [FIX] Fix broken rdbWriteRaw() return value check in rdb.c (harmless).
+* [FIX] Log to what master a slave is going to connect to.
+* [FIX] Only run the fast active expire cycle if master & enabled.
+* [FIX] Fixed a replication bug involving 32 bit instances and big datasets
+        hard to compress that resulted into more than 2GB of RDB file sent.
+
+--[ Redis 2.6.16 ] Release date: 28 Aug 2013
+
+UPGRADE URGENCY: MODERATE.
+
+* [FIX] Stop writes when fork() fails when trying to BGSAVE. BGSAVE errors
+        were trapped only in the case the saving child failed, so the fork()
+        error was no trapped as no child is created at all.
+* [FIX] Fix a serious memory efficiency regression, Redis 2.6.16 is
+        significantly better with large values (>= a few kbytes) and will
+        be able to store two times the amount of data compared to Redis 2.6.15
+        when values are in that range.
+* [FIX] Fixed an issue with Table conversion in the lua-cmsgpack library exposed
+        by the Redis scripting engine.
+* [NEW] DEBUG SDSLEN was introduced to debug memory inefficiencies due to
+        SDS allocation more easily.
+
+--[ Redis 2.6.15 ] Release date: 21 Aug 2013
+
+UPGRADE URGENCY: MODERATE, upgrade ASAP only if you experience issues related to
+                 the expired keys collection algorithm, or if you use the
+                 ZUNIONSTORE command.
+
+* [FIX] Improved expired keys collection algorithm. Even under heavy load keys
+        to be expired can't accumulate because of lack of CPU time.
+* [FIX] Fixed Issue #1240, ZUNIONSTORE could lead to wrong result.
+* [NEW] redis-benchmark improvements.
+* [NEW] dict.c API wrong usage detection.
+
+WARNING: redis-benchmark released with 2.6.15 features non backward compatible
+         change in the way the random arguments are specified, use the --help
+         option for more information.
+
+--[ Redis 2.6.14 ] Release date: 20 Jun 2013
+
+UPGRADE URGENCY: HIGH because of the following two issues:
+    * Lua scripting + Replication + AOF in slaves problem (see Issue #1164).
+    * AOF + expires possible race condition (see Issue #1079).
+
+* [FIX] AOF bug: expire could be removed from key on AOF rewrite.
+* [FIX] Allow writes from scripts called by AOF loading in read-only slaves.
+* [FIX] Sentinel: parse new version of INFO replication output correctly.
+* [NEW] Reset masterauth if an empty string is configured.
+
+--[ Redis 2.6.13 ]
+
+UPGRADE URGENCY: MODERATE, nothing very critical but upgrading is suggested
+                 if you experienced:
+
+                 1) Strange issues with Lua scripting.
+                 2) Not reconfigured reappearing master using Sentinel.
+                 3) Server continusly trying to save on save error.
+
+                 This version of Redis may also help with AOF and slow / busy
+                 disks and latency issues.
+
+* [FIX] Throttle BGSAVE attempt on saving error.
+* [FIX] redis-cli: raise error on bad command line switch.
+* [FIX] Redis/Jemalloc Gitignore were too aggressive.
+* [FIX] Test: fix RDB test checking file permissions.
+* [FIX] Sentinel: always redirect on master->slave transition.
+* [FIX] Lua updated to version 5.1.5. Fixes rare scripting issues.
+* [NEW] AOF: improved latency figures with slow/busy disks.
+* [NEW] Sentinel: turn old master into a slave when it comes back.
+* [NEW] More explicit panic message on out of memory.
+* [NEW] redis-cli: --latency-history mode implemented.
+
+--[ Redis 2.6.12 ]
+
+UPGRADE URGENCY: MODERATE, nothing very critical but a few non trivial bugs.
+
+* [BUGFIX]   redis-cli --bigkeys: don't crash with empty DB.
+* [BUGFIX]   stop-writes-on-bgsave-error now works in redis.conf
+* [BUGFIX]   Don't crash at startup if RDB is there but can't be opened.
+* [BUGFIX]   Initial value for master_link_down_since_seconds is now huge.
+* [BUGFIX]   Allow SELECT while loading the DB.
+* [BUGFIX]   Don't replicate/AOF an empty MULTI/EXEC if the transaction
+             is empty or containing just read-only commands.
+* [BUGFIX]   EXPIRE should not be able to resurrect keys (see issue #1026).
+* [IMPROVED] Extended SET back ported from Redis 2.8 / unstable
+             See http://redis.io/commands/set for more information.
+* [IMPROVED] Test suite improved.
+
+--[ Redis 2.6.11 ]
+
+UPGRADE URGENCY: LOW, however updating is encouraged if you have many instances
+                 per server and you want to lower the CPU / energy usage.
+
+* [BUGFIX]   Replication: more strict error checking for master PING reply.
+* [BUGFIX]   redis-cli: use keepalive socket option for improved reliability.
+* [BUGFIX]   Allow AUTH while loading the DB in memory.
+* [BUGFIX]   Don't segfault on unbalanced quotes while parsing config file.
+* [BUGFIX]   Don't segfault if command gets propagated to AOF / replication
+             link as another command name that was renamed in redis.conf
+* [IMPROVED] serverCron() frequency is now a runtime parameter (was REDIS_HZ).
+* [IMPROVED] Use a lot less CPU when idle, even with many configured DBs.
+
+--[ Redis 2.6.10 ]
+
+UPGRADE URGENCY: MODERATE, this release contains many non-critical fixes
+                 and many small improvements.
+
+* [BUGFIX]   redis-cli --rdb, fixed when the server sends newlines to ping.
+* [BUGFIX]   redis-cli, minor fixes on connection handling, prompt.
+* [BUGFIX]   Slow log: don't log EXEC, just executed commands.
+* [BUGFIX]   On failed shutdown don't try again and again compulsively.
+* [BUGFIX]   Fix build on sunos without backtrace().
+* [BUGFIX]   UNSUBSCRIBE and PUNSUBSCRIBE: always provide a reply (see 742e580)
+* [BUGFIX]   Lua struct library was broken, upgraded.
+* [BUGFIX]   Fix a bug in srandmemberWithCountCommand() with count argument.
+* [BUGFIX]   Test: disable clients timeout to prevent issues on slow systems.
+* [BUGFIX]   Sentinel: don't advertise the promoted slave as master too early.
+* [IMPROVED] Whitelist SIGUSR1, see http://redis.io/topics/signals.
+* [IMPROVED] Simpler to understand redis-cli --bigkeys output.
+* [IMPROVED] Test now works with tclsh > 8.5.
+* [IMPROVED] Added option to turn of the Nagle algorithm in slave socket.
+* [IMPROVED] Optionally use SO_KEEPALIVE to detect dead peers.
+
 --[ Redis 2.6.9 ]
 
 UPGRADE URGENCY: MODERATE if you use replication.

@@ -58,7 +58,9 @@ redisClient *createClient(int fd) {
      * contexts (for instance a Lua script) we need a non connected client. */
     if (fd != -1) {
         anetNonBlock(NULL,fd);
-        anetTcpNoDelay(NULL,fd);
+        anetEnableTcpNoDelay(NULL,fd);
+        if (server.tcpkeepalive)
+            anetKeepAlive(NULL,fd,server.tcpkeepalive);
         if (aeCreateFileEvent(server.el,fd,AE_READABLE,
             readQueryFromClient, c) == AE_ERR)
         {
@@ -927,15 +929,19 @@ int processMultibulkBuffer(redisClient *c) {
 
             pos += newline-(c->querybuf+pos)+2;
             if (ll >= REDIS_MBULK_BIG_ARG) {
+                size_t qblen;
+
                 /* If we are going to read a large object from network
                  * try to make it likely that it will start at c->querybuf
-                 * boundary so that we can optimized object creation
+                 * boundary so that we can optimize object creation
                  * avoiding a large copy of data. */
                 c->querybuf = sdsrange(c->querybuf,pos,-1);
                 pos = 0;
+                qblen = sdslen(c->querybuf);
                 /* Hint the sds library about the amount of bytes this string is
                  * going to contain. */
-                c->querybuf = sdsMakeRoomFor(c->querybuf,ll+2);
+                if (qblen < ll+2)
+                    c->querybuf = sdsMakeRoomFor(c->querybuf,ll+2-qblen);
             }
             c->bulklen = ll;
         }
@@ -1261,7 +1267,7 @@ void rewriteClientCommandVector(redisClient *c, int argc, ...) {
     /* Replace argv and argc with our new versions. */
     c->argv = argv;
     c->argc = argc;
-    c->cmd = lookupCommand(c->argv[0]->ptr);
+    c->cmd = lookupCommandOrOriginal(c->argv[0]->ptr);
     redisAssertWithInfo(c,NULL,c->cmd != NULL);
     va_end(ap);
 }
@@ -1279,7 +1285,7 @@ void rewriteClientCommandArgument(redisClient *c, int i, robj *newval) {
 
     /* If this is the command name make sure to fix c->cmd. */
     if (i == 0) {
-        c->cmd = lookupCommand(c->argv[0]->ptr);
+        c->cmd = lookupCommandOrOriginal(c->argv[0]->ptr);
         redisAssertWithInfo(c,NULL,c->cmd != NULL);
     }
 }

@@ -56,7 +56,7 @@ static inline size_t sdsavail(const sds s) {
 
 sds sdsnewlen(const void *init, size_t initlen);
 sds sdsnew(const char *init);
-sds sdsempty();
+sds sdsempty(void);
 size_t sdslen(const sds s);
 sds sdsdup(const sds s);
 void sdsfree(sds s);
@@ -88,7 +88,6 @@ void sdstoupper(sds s);
 sds sdsfromlonglong(long long value);
 sds sdscatrepr(sds s, const char *p, size_t len);
 sds *sdssplitargs(const char *line, int *argc);
-void sdssplitargs_free(sds *argv, int argc);
 sds sdsmapchars(sds s, const char *from, const char *to, size_t setlen);
 
 /* Low level functions exposed to the user API */

@@ -99,7 +99,7 @@ int rdbSaveLen(rio *rdb, uint32_t len) {
         buf[0] = (REDIS_RDB_32BITLEN<<6);
         if (rdbWriteRaw(rdb,buf,1) == -1) return -1;
         len = htonl(len);
-        if (rdbWriteRaw(rdb,&len,4) == -4) return -1;
+        if (rdbWriteRaw(rdb,&len,4) == -1) return -1;
         nwritten = 1+4;
     }
     return nwritten;
@@ -722,6 +722,7 @@ int rdbSaveBackground(char *filename) {
     if (server.rdb_child_pid != -1) return REDIS_ERR;
 
     server.dirty_before_bgsave = server.dirty;
+    server.lastbgsave_try = time(NULL);
 
     start = ustime();
     if ((childpid = fork()) == 0) {
@@ -736,7 +737,7 @@ int rdbSaveBackground(char *filename) {
 
             if (private_dirty) {
                 redisLog(REDIS_NOTICE,
-                    "RDB: %lu MB of memory used by copy-on-write",
+                    "RDB: %zu MB of memory used by copy-on-write",
                     private_dirty/(1024*1024));
             }
         }
@@ -745,6 +746,7 @@ int rdbSaveBackground(char *filename) {
         /* Parent */
         server.stat_fork_time = ustime()-start;
         if (childpid == -1) {
+            server.lastbgsave_status = REDIS_ERR;
             redisLog(REDIS_WARNING,"Can't save in background: fork: %s",
                 strerror(errno));
             return REDIS_ERR;
@@ -1067,11 +1069,8 @@ int rdbLoad(char *filename) {
     FILE *fp;
     rio rdb;
 
-    fp = fopen(filename,"r");
-    if (!fp) {
-        errno = ENOENT;
-        return REDIS_ERR;
-    }
+    if ((fp = fopen(filename,"r")) == NULL) return REDIS_ERR;
+
     rioInitWithFile(&rdb,fp);
     if (server.rdb_checksum)
         rdb.update_cksum = rioGenericUpdateChecksum;

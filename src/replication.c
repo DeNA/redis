@@ -172,6 +172,9 @@ void syncCommand(redisClient *c) {
         }
         c->replstate = REDIS_REPL_WAIT_BGSAVE_END;
     }
+
+    if (server.repl_disable_tcp_nodelay)
+        anetDisableTcpNoDelay(NULL, c->fd); /* Non critical if it fails. */
     c->repldbfd = -1;
     c->flags |= REDIS_SLAVE;
     c->slaveseldb = 0;
@@ -424,6 +427,7 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
         redisLog(REDIS_NOTICE, "MASTER <-> SLAVE sync: Loading DB in memory");
+        signalFlushedDb(-1);
         emptyDb();
         /* Before loading the DB into memory we need to delete the readable
          * handler, otherwise it will get called recursively since
@@ -575,11 +579,16 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
             goto error;
         }
 
-        /* We don't care about the reply, it can be +PONG or an error since
-         * the server requires AUTH. As long as it replies correctly, it's
-         * fine from our point of view. */
-        if (buf[0] != '-' && buf[0] != '+') {
-            redisLog(REDIS_WARNING,"Unexpected reply to PING from master.");
+        /* We accept only two replies as valid, a positive +PONG reply
+         * (we just check for "+") or an authentication error.
+         * Note that older versions of Redis replied with "operation not
+         * permitted" instead of using a proper error code, so we test
+         * both. */
+        if (buf[0] != '+' &&
+            strncmp(buf,"-NOAUTH",7) != 0 &&
+            strncmp(buf,"-ERR operation not permitted",28) != 0)
+        {
+            redisLog(REDIS_WARNING,"Error reply to PING from master: '%s'",buf);
             goto error;
         } else {
             redisLog(REDIS_NOTICE,
@@ -786,7 +795,8 @@ void replicationCron(void) {
 
     /* Check if we should connect to a MASTER */
     if (server.repl_state == REDIS_REPL_CONNECT) {
-        redisLog(REDIS_NOTICE,"Connecting to MASTER...");
+        redisLog(REDIS_NOTICE,"Connecting to MASTER %s:%d",
+            server.masterhost, server.masterport);
         if (connectWithMaster() == REDIS_OK) {
             redisLog(REDIS_NOTICE,"MASTER <-> SLAVE sync started");
         }
@@ -796,7 +806,7 @@ void replicationCron(void) {
      * So slaves can implement an explicit timeout to masters, and will
      * be able to detect a link disconnection even if the TCP connection
      * will not actually go down. */
-    if (!(server.cronloops % (server.repl_ping_slave_period * REDIS_HZ))) {
+    if (!(server.cronloops % (server.repl_ping_slave_period * server.hz))) {
         listIter li;
         listNode *ln;
 

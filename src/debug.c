@@ -294,6 +294,29 @@ void debugCommand(redisClient *c) {
             (void*)val, val->refcount,
             strenc, (long long) rdbSavedObjectLen(val),
             val->lru, estimateObjectIdleTime(val));
+    } else if (!strcasecmp(c->argv[1]->ptr,"sdslen") && c->argc == 3) {
+        dictEntry *de;
+        robj *val;
+        sds key;
+
+        if ((de = dictFind(c->db->dict,c->argv[2]->ptr)) == NULL) {
+            addReply(c,shared.nokeyerr);
+            return;
+        }
+        val = dictGetVal(de);
+        key = dictGetKey(de);
+
+        if (val->type != REDIS_STRING || val->encoding != REDIS_ENCODING_RAW) {
+            addReplyError(c,"Not an sds encoded string.");
+        } else {
+            addReplyStatusFormat(c,
+                "key_sds_len:%lld, key_sds_avail:%lld, "
+                "val_sds_len:%lld, val_sds_avail:%lld",
+                (long long) sdslen(key),
+                (long long) sdsavail(key),
+                (long long) sdslen(val->ptr),
+                (long long) sdsavail(val->ptr));
+        }
     } else if (!strcasecmp(c->argv[1]->ptr,"populate") && c->argc == 3) {
         long keys, j;
         robj *key, *val;
@@ -330,9 +353,14 @@ void debugCommand(redisClient *c) {
 
         usleep(utime);
         addReply(c,shared.ok);
+    } else if (!strcasecmp(c->argv[1]->ptr,"set-active-expire") &&
+               c->argc == 3)
+    {
+        server.active_expire_enabled = atoi(c->argv[2]->ptr);
+        addReply(c,shared.ok);
     } else {
-        addReplyError(c,
-            "Syntax error, try DEBUG [SEGFAULT|OBJECT <key>|SWAPIN <key>|SWAPOUT <key>|RELOAD]");
+        addReplyErrorFormat(c, "Unknown DEBUG subcommand or wrong number of arguments for '%s'",
+            (char*)c->argv[1]->ptr);
     }
 }
 
@@ -382,9 +410,12 @@ void redisLogObjectDebugInfo(robj *o) {
     redisLog(REDIS_WARNING,"Object encoding: %d", o->encoding);
     redisLog(REDIS_WARNING,"Object refcount: %d", o->refcount);
     if (o->type == REDIS_STRING && o->encoding == REDIS_ENCODING_RAW) {
-        redisLog(REDIS_WARNING,"Object raw string len: %d", sdslen(o->ptr));
-        if (sdslen(o->ptr) < 4096)
-            redisLog(REDIS_WARNING,"Object raw string content: \"%s\"", (char*)o->ptr);
+        redisLog(REDIS_WARNING,"Object raw string len: %zu", sdslen(o->ptr));
+        if (sdslen(o->ptr) < 4096) {
+            sds repr = sdscatrepr(sdsempty(),o->ptr,sdslen(o->ptr));
+            redisLog(REDIS_WARNING,"Object raw string content: %s", repr);
+            sdsfree(repr);
+        }
     } else if (o->type == REDIS_LIST) {
         redisLog(REDIS_WARNING,"List length: %d", (int) listTypeLength(o));
     } else if (o->type == REDIS_SET) {
@@ -794,7 +825,7 @@ void enableWatchdog(int period) {
     /* If the configured period is smaller than twice the timer period, it is
      * too short for the software watchdog to work reliably. Fix it now
      * if needed. */
-    min_period = (1000/REDIS_HZ)*2;
+    min_period = (1000/server.hz)*2;
     if (period < min_period) period = min_period;
     watchdogScheduleSignal(period); /* Adjust the current timer. */
     server.watchdog_period = period;
